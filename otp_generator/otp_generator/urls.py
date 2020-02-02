@@ -16,10 +16,11 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.authtoken import views
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include('otp.urls')),
+    path('otp/', include('otp.urls')),
     path('merchant/', include('merchant.urls')),
-    path('token-auth/', views.obtain_auth_token,name="token-auth")
+    path('token/', TokenObtainPairView.as_view(), name="token")
 ]

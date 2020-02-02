@@ -5,4 +5,4 @@ from .models import OTP
 class OTPSerializer(ModelSerializer):
     class Meta:
         model = OTP
-        fields = '__all__'
+        fields = ['user_id']

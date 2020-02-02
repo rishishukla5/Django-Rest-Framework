@@ -34,8 +34,8 @@ class MerchantView(APIView):
             data['response'] = "Successfully Registered Merchant"
             data['merchant_id'] = merchant.merchant_id
             data['name'] = merchant.name
-            # token = Token.objects.get(user=merchant).key
-            token, _ = Token.objects.get_or_create(user=merchant)
+            token = Token.objects.get(user=merchant).key
+            # token = Token.objects.get_or_create(user=merchant)
             data['token'] = token
         else:
             data = serializer.errors
