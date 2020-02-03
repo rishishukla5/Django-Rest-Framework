@@ -5,5 +5,5 @@ from .views import MerchantView
 # app_name = "Merchant"
 
 urlpatterns = [
-    path('', MerchantView.as_view(),name='merchant')
+    path('', MerchantView.as_view(), name='merchant')
 ]
