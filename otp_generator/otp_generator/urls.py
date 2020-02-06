@@ -22,5 +22,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('otp/', include('otp.urls')),
     path('merchant/', include('merchant.urls')),
-    path('token/', TokenObtainPairView.as_view(), name="token")
+    path('token/', TokenObtainPairView.as_view(), name="token"),
 ]
