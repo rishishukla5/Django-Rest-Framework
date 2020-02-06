@@ -1,9 +1,9 @@
 import random
 import string
+import redis
 
-from django.conf import settings
 from django.core.cache import cache
-from django.core.cache.backends.base import DEFAULT_TIMEOUT
+from django.core import cache
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -11,24 +11,31 @@ from rest_framework.views import APIView
 from .models import OTP
 from .serializers import OTPSerializer
 
-CACHE_TTL = getattr(settings, 'CACHE_TTL', DEFAULT_TIMEOUT)
+redis_django = redis.Redis(host='localhost', port=6379, db=0)
 
 
 class OTPView(APIView):
 
-    def generate(self, serializer):
+    def generate(self, serializer, uuid):
         otp = serializer.save()
         random_otp = RandomOTP()
         otp.otp_generated = random_otp.generate()
         otp.save()
-        cache.set(otp.user_id, otp.otp_generated, timeout=CACHE_TTL)
-        return Response(otp.otp_generated, status=status.HTTP_201_CREATED)
+        redis_django.setex(otp.user_id, 60, otp.otp_generated)
+        content = {
+            "UUID": uuid,
+            "User ID": otp.user_id,
+            "OTP ": otp.otp_generated,
+
+        }
+
+        return Response(content, status=status.HTTP_201_CREATED)
 
     def validate(self, data):
         user_id = data['user_id']
         # If the user_id is present in cache, check if the OTP is valid or not.
-        if user_id in cache:
-            otp = cache.get(user_id)
+        if user_id in redis_django:
+            otp = redis_django.get(user_id)
             if otp == data['otp_generated']:
                 content = {"message": "OTP Validated Successfully"}
                 return Response(content, status=status.HTTP_200_OK)
@@ -42,20 +49,27 @@ class OTPView(APIView):
 
     def post(self, request):
         serializer = OTPSerializer(data=request.data)
+        uuid = request.GET['UUID']
         if serializer.is_valid():
             # If the OTP field is not present in the POST request, we need to send an OTP
             if 'otp_generated' not in request.data.keys():
                 # If the OTP has already been generated and hasn't expired yet, return it from the cache
-                if request.data['user_id'] in cache:
-                    otp = cache.get(request.data['user_id'])
-                    return Response(otp, status=status.HTTP_200_OK)
+                if request.data['user_id'] in redis_django:
+                    otp = redis_django.get(request.data['user_id'])
+                    content = {
+                        "UUID": uuid,
+                        "User ID": request.data['user_id'],
+                        "OTP ": otp,
+
+                    }
+                    return Response(content, status=status.HTTP_200_OK)
                 # If the OTP isn't present in the cache, generate an OTP and return
                 else:
                     # If the user is present in the database and not in cache, delete the user from the database
                     queryset = OTP.objects.filter(user_id=request.data['user_id'])
                     if queryset:
                         queryset.delete()
-                    return self.generate(serializer)           # Generating OTP
+                    return self.generate(serializer, uuid)  # Generating OTP
             # Validate the OTP corresponding to the user_id present in the POST request
             else:
                 return self.validate(request.data)
@@ -67,9 +81,29 @@ class OTPView(APIView):
         data = request.data
         queryset = OTP.objects.get(user_id=data['user_id'])
         queryset.delete()  # Deleting user from the database
-        if data['user_id'] in cache:
-            cache.delete(data['user_id'])  # Deleting user from the cache
+        if data['user_id'] in redis_django:
+            redis_django.delete(data['user_id'])  # Deleting user from the cache
         return Response(data="Delete", status=status.HTTP_410_GONE)
+
+
+class HealthStatusView(APIView):
+
+    # def redis_status(self):
+    #     cache_stats = []
+    #     for cache_name in settings.CACHE.keys():
+    #         redis_cache = cache.get_cache(cache_name)
+    #         client = getattr(redis_cache, '_client', None)
+    #         stats = client.info()
+    #         cache_stats.append(stats)
+    #     content = {
+    #         "Stats": cache_stats
+    #     }
+    #     return content
+
+    def post(self, request):
+        redis_health = redis_django.monito()
+        print(redis_django.ping())
+        return Response(redis_health, status=status.HTTP_200_OK)
 
 
 class RandomOTP:
