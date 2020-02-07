@@ -7,6 +7,9 @@ from django.core import cache
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from func_timeout import func_timeout, FunctionTimedOut
+from django.db import connections
+from django.db.utils import OperationalError
 
 from .models import OTP
 from .serializers import OTPSerializer
@@ -88,22 +91,31 @@ class OTPView(APIView):
 
 class HealthStatusView(APIView):
 
-    # def redis_status(self):
-    #     cache_stats = []
-    #     for cache_name in settings.CACHE.keys():
-    #         redis_cache = cache.get_cache(cache_name)
-    #         client = getattr(redis_cache, '_client', None)
-    #         stats = client.info()
-    #         cache_stats.append(stats)
-    #     content = {
-    #         "Stats": cache_stats
-    #     }
-    #     return content
+    def redis_status(self):
+        redis_health = "Working Fine"
+        try:
+            temp = func_timeout(0.0001, redis_django.ping)
+        except FunctionTimedOut:
+            redis_health = "Timeout"
+        return redis_health
 
-    def post(self, request):
-        redis_health = redis_django.monito()
-        print(redis_django.ping())
-        return Response(redis_health, status=status.HTTP_200_OK)
+    def sql_status(self):
+        db_conn = connections['default']
+        try:
+            c = db_conn.cursor()
+        except OperationalError:
+            return "Not Alive"
+        else:
+            return "Alive"
+
+    def get(self, request):
+        redis_health = self.redis_status()
+        sql_health = self.sql_status()
+        final_status = {
+            "Redis": redis_health,
+            "SQL": sql_health
+        }
+        return Response(final_status, status=status.HTTP_200_OK)
 
 
 class RandomOTP:
